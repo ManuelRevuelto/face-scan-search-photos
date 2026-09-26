@@ -195,6 +195,9 @@ $('#export').onclick = async () => {
 let polling = null;
 async function loadInfo() {
   const info = await (await fetch('/api/info')).json();
+  if (info.read_only) {  // despliegue público: sin indexar ni copiar a carpeta
+    document.querySelectorAll('.btns, .btns + .hint, #selall, #dest, #export').forEach(el => el.style.display = 'none');
+  }
   if (!$('#thr').dataset.init) { $('#thr').value = info.threshold; $('#thr').dataset.init = 1; $('#thr').oninput(); }
   const rows = info.sources.map(s => {
     const st = info.stats[s.name] || { photos: 0, faces: 0, errors: 0 };
@@ -235,7 +238,7 @@ $('#reindex').onclick = async () => {
 };
 $('#stop').onclick = () => fetch('/api/index/stop', { method: 'POST' });
 
-loadInfo(); pollStatus();
+loadInfo().then(() => { if ($('#export').style.display !== 'none') pollStatus(); });
 </script>
 </body>
 </html>

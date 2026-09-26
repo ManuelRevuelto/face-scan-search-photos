@@ -1,9 +1,12 @@
+import base64
 import logging
 import mimetypes
+import os
 import re
+import secrets
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import BaseModel
@@ -14,8 +17,39 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 
 STATIC = Path(__file__).parent / "static"
 
+# Despliegue público: APP_PASSWORD activa el login HTTP Basic y FACESCAN_READONLY desactiva
+# indexar y exportar (escriben en el servidor). En local, sin estas variables, todo sigue igual.
+APP_USER = os.environ.get("APP_USER", "admin")
+APP_PASSWORD = os.environ.get("APP_PASSWORD")
+READ_ONLY = os.environ.get("FACESCAN_READONLY", "").lower() in ("1", "true", "yes")
+
 app = FastAPI(title="Face Scan Search Photos")
 svc = Services()
+
+
+def _authorized(header: str | None) -> bool:
+    if not header or not header.startswith("Basic "):
+        return False
+    try:
+        user, _, password = base64.b64decode(header[6:]).decode("utf-8").partition(":")
+    except ValueError:
+        return False
+    return secrets.compare_digest(user.encode(), APP_USER.encode()) and secrets.compare_digest(
+        password.encode(), APP_PASSWORD.encode()
+    )
+
+
+@app.middleware("http")
+async def basic_auth(request: Request, call_next):
+    if APP_PASSWORD and not _authorized(request.headers.get("authorization")):
+        return Response("Autenticación requerida", status_code=401,
+                        headers={"WWW-Authenticate": 'Basic realm="Face Scan", charset="UTF-8"'})
+    return await call_next(request)
+
+
+def writable():
+    if READ_ONLY:
+        raise HTTPException(403, "Desactivado en modo solo lectura")
 
 
 @app.get("/")
@@ -27,6 +61,7 @@ def index():
 def info():
     return {
         "threshold": svc.cfg["threshold"],
+        "read_only": READ_ONLY,
         "sources": [{"name": s.name, "type": s.type} for s in svc.sources.values()],
         "stats": svc.db.stats(),
     }
@@ -54,7 +89,7 @@ async def search(files: list[UploadFile] = File(...), threshold: float = Form(No
     return {"results": out}
 
 
-@app.post("/api/index")
+@app.post("/api/index", dependencies=[Depends(writable)])
 def start_index(source: str | None = None):
     if source and source not in svc.sources:
         raise HTTPException(404, f"Fuente desconocida: {source}")
@@ -62,7 +97,7 @@ def start_index(source: str | None = None):
     return {"started": started, "status": svc.indexer.status}
 
 
-@app.post("/api/index/stop")
+@app.post("/api/index/stop", dependencies=[Depends(writable)])
 def stop_index():
     svc.indexer.stop()
     return {"status": svc.indexer.status}
@@ -111,7 +146,7 @@ class ExportRequest(BaseModel):
     destination: str
 
 
-@app.post("/api/export")
+@app.post("/api/export", dependencies=[Depends(writable)])
 def export(req: ExportRequest):
     """Copia los originales de las fotos seleccionadas a una carpeta local."""
     dest = Path(req.destination).expanduser()
