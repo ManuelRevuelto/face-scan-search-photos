@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buscador de caras</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --text: #1d2330; --muted: #667085; --border: #e3e6eb;
+    --accent: #3b5bdb; --accent-soft: #e7ecff; --ok: #2b8a3e; --err: #c92a2a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b1f27; --text: #e6e8ec; --muted: #98a2b3; --border: #2b313c;
+      --accent: #7d95ff; --accent-soft: #232b45; --ok: #69db7c; --err: #ff8787;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 20px 24px 8px; }
+  h1 { margin: 0; font-size: 22px; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 20px; padding: 16px 24px 40px; align-items: start; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 16px; } header { padding: 16px 16px 4px; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { font-size: 15px; margin: 0 0 12px; }
+  #drop { border: 2px dashed var(--border); border-radius: 10px; padding: 22px 12px; text-align: center; color: var(--muted); cursor: pointer; transition: .15s; }
+  #drop.over, #drop:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+  #refs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  #refs .ref { position: relative; }
+  #refs img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; display: block; }
+  #refs button { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; padding: 0; border-radius: 50%; font-size: 12px; line-height: 1; }
+  label.row { display: flex; justify-content: space-between; margin: 14px 0 4px; font-size: 14px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .hint { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
+  button { font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; width: 100%; margin-top: 14px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .btns { display: flex; gap: 8px; margin-top: 12px; }
+  .btns button { flex: 1; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td { padding: 3px 0; } td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-top: 10px; }
+  .bar div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  #idxmsg { font-size: 13px; color: var(--muted); margin-top: 6px; min-height: 1.5em; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .toolbar .count { flex: 1; color: var(--muted); min-width: 160px; }
+  .toolbar input[type=text] { font: inherit; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); min-width: 0; width: 220px; }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; position: relative; }
+  .card.sel { outline: 2px solid var(--accent); }
+  .card .img { position: relative; aspect-ratio: 1; background: var(--border); }
+  .card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .card .box { position: absolute; border: 2px solid #ffd43b; border-radius: 4px; box-shadow: 0 0 0 1px #0006; pointer-events: none; }
+  .card .meta { padding: 8px 10px; font-size: 12px; }
+  .card .score { font-weight: 600; font-size: 14px; }
+  .card .name { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card a { color: var(--accent); text-decoration: none; }
+  .card input { position: absolute; top: 8px; left: 8px; width: 18px; height: 18px; accent-color: var(--accent); }
+  .empty { color: var(--muted); text-align: center; padding: 60px 20px; border: 1px dashed var(--border); border-radius: 12px; }
+  .error { color: var(--err); } .okc { color: var(--ok); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Buscador de fotos por cara</h1>
+  <p>Sube una o varias fotos tuyas y encuentra en qué fotos del archivo apareces. Todo se procesa en este equipo.</p>
+</header>
+<main>
+  <aside>
+    <section class="panel">
+      <h2>1. Tus fotos de referencia</h2>
+      <div id="drop">Arrastra aquí tus fotos o haz clic para elegirlas<br><small>Mejor varias: de frente, de perfil, con/sin gafas…</small></div>
+      <input id="file" type="file" accept="image/*" multiple hidden>
+      <div id="refs"></div>
+      <label class="row" for="thr"><span>Umbral de similitud</span><strong id="thrv"></strong></label>
+      <input id="thr" type="range" min="0.20" max="0.80" step="0.01">
+      <p class="hint">Más bajo = más resultados (y más falsos positivos). Suele ir bien entre 0.35 y 0.50.</p>
+      <button id="go" class="primary" disabled>Buscar</button>
+    </section>
+    <section class="panel">
+      <h2>2. Índice de fotos</h2>
+      <table id="stats"></table>
+      <div class="bar"><div id="prog"></div></div>
+      <div id="idxmsg"></div>
+      <div class="btns">
+        <button id="reindex">Indexar / actualizar</button>
+        <button id="stop" disabled>Detener</button>
+      </div>
+      <p class="hint">Solo procesa fotos nuevas o modificadas (y reintenta las que dieron error). Se puede detener y continuar más tarde.</p>
+    </section>
+  </aside>
+  <section>
+    <div class="toolbar" id="toolbar" hidden>
+      <span class="count" id="count"></span>
+      <button id="selall">Seleccionar todo</button>
+      <input type="text" id="dest" placeholder="Carpeta destino, p. ej. D:/MisFotos">
+      <button id="export">Copiar seleccionadas</button>
+    </div>
+    <div id="grid"><div class="empty">Aún no has buscado. Sube tu foto y pulsa <b>Buscar</b>.</div></div>
+  </section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const refs = [];
+let results = [];
+const selected = new Set();
+
+function renderRefs() {
+  $('#refs').innerHTML = '';
+  refs.forEach((f, i) => {
+    const d = document.createElement('div'); d.className = 'ref';
+    const img = document.createElement('img'); img.src = URL.createObjectURL(f); img.title = f.name;
+    const b = document.createElement('button'); b.textContent = '×'; b.title = 'Quitar';
+    b.onclick = () => { refs.splice(i, 1); renderRefs(); };
+    d.append(img, b); $('#refs').append(d);
+  });
+  $('#go').disabled = refs.length === 0;
+}
+function addFiles(list) { for (const f of list) if (f.type.startsWith('image/') || /\.hei[cf]$/i.test(f.name)) refs.push(f); renderRefs(); }
+
+$('#drop').onclick = () => $('#file').click();
+$('#file').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
+['dragenter', 'dragover'].forEach(ev => $('#drop').addEventListener(ev, e => { e.preventDefault(); $('#drop').classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => $('#drop').addEventListener(ev, e => { e.preventDefault(); $('#drop').classList.remove('over'); }));
+$('#drop').addEventListener('drop', e => addFiles(e.dataTransfer.files));
+
+$('#thr').oninput = () => $('#thrv').textContent = (+$('#thr').value).toFixed(2);
+
+$('#go').onclick = async () => {
+  const fd = new FormData();
+  refs.forEach(f => fd.append('files', f));
+  fd.append('threshold', $('#thr').value);
+  $('#go').disabled = true; $('#go').textContent = 'Buscando…';
+  try {
+    const r = await fetch('/api/search', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    results = data.results; selected.clear(); renderResults();
+  } catch (e) {
+    $('#toolbar').hidden = true;
+    $('#grid').innerHTML = `<div class="empty error">${e.message}</div>`;
+  } finally { $('#go').disabled = false; $('#go').textContent = 'Buscar'; }
+};
+
+function renderResults() {
+  const grid = $('#grid'); grid.innerHTML = '';
+  $('#toolbar').hidden = results.length === 0;
+  $('#count').textContent = `${results.length} fotos encontradas · ${selected.size} seleccionadas`;
+  if (!results.length) { grid.innerHTML = '<div class="empty">Sin coincidencias. Prueba a bajar el umbral o añadir más fotos de referencia.</div>'; return; }
+  for (const r of results) {
+    const c = document.createElement('div'); c.className = 'card' + (selected.has(r.photo_id) ? ' sel' : '');
+    const wrap = document.createElement('div'); wrap.className = 'img';
+    const img = document.createElement('img'); img.loading = 'lazy'; img.src = r.thumb_url; img.alt = r.name;
+    wrap.append(img);
+    img.onload = () => {
+      // La miniatura se muestra recortada (object-fit: cover): se recoloca la caja de la cara
+      if (!r.bbox) return;
+      const W = img.naturalWidth, H = img.naturalHeight, s = Math.max(1 / W, 1 / H) * wrap.clientWidth;
+      const ox = (wrap.clientWidth - W * s) / 2, oy = (wrap.clientHeight - H * s) / 2;
+      const [x1, y1, x2, y2] = r.bbox, b = document.createElement('div'); b.className = 'box';
+      Object.assign(b.style, { left: ox + x1 * W * s + 'px', top: oy + y1 * H * s + 'px', width: (x2 - x1) * W * s + 'px', height: (y2 - y1) * H * s + 'px' });
+      wrap.append(b);
+    };
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = selected.has(r.photo_id);
+    cb.onchange = () => { cb.checked ? selected.add(r.photo_id) : selected.delete(r.photo_id); c.classList.toggle('sel', cb.checked); $('#count').textContent = `${results.length} fotos encontradas · ${selected.size} seleccionadas`; };
+    const meta = document.createElement('div'); meta.className = 'meta';
+    meta.innerHTML = `<div class="score">${Math.round(r.score * 100)}%</div><div class="name"></div><a target="_blank" rel="noopener">Abrir original ↗</a>`;
+    meta.querySelector('.name').textContent = `${r.source} · ${r.name}`; meta.querySelector('.name').title = r.name;
+    meta.querySelector('a').href = r.open_url;
+    c.append(wrap, cb, meta); grid.append(c);
+  }
+}
+
+$('#selall').onclick = () => {
+  const all = selected.size < results.length;
+  selected.clear(); if (all) results.forEach(r => selected.add(r.photo_id));
+  renderResults();
+};
+
+$('#export').onclick = async () => {
+  const dest = $('#dest').value.trim();
+  if (!selected.size || !dest) { $('#count').textContent = 'Selecciona fotos e indica una carpeta destino'; return; }
+  $('#export').disabled = true; $('#export').textContent = 'Copiando…';
+  try {
+    const r = await fetch('/api/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ photo_ids: [...selected], destination: dest }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.statusText);
+    $('#count').innerHTML = `<span class="okc">${d.copied} copiadas en ${d.destination}</span>${d.errors.length ? ` · <span class="error">${d.errors.length} errores</span>` : ''}`;
+  } catch (e) { $('#count').innerHTML = `<span class="error">${e.message}</span>`; }
+  finally { $('#export').disabled = false; $('#export').textContent = 'Copiar seleccionadas'; }
+};
+
+// --- Índice ------------------------------------------------------------
+let polling = null;
+async function loadInfo() {
+  const info = await (await fetch('/api/info')).json();
+  if (!$('#thr').dataset.init) { $('#thr').value = info.threshold; $('#thr').dataset.init = 1; $('#thr').oninput(); }
+  const rows = info.sources.map(s => {
+    const st = info.stats[s.name] || { photos: 0, faces: 0, errors: 0 };
+    return `<tr><td>${s.name} <small style="color:var(--muted)">(${s.type})</small></td><td class="n">${st.photos} fotos · ${st.faces} caras${st.errors ? ` · <a class="error" href="/api/errors" target="_blank" title="Ver fotos con error">${st.errors} err</a>` : ''}</td></tr>`;
+  });
+  $('#stats').innerHTML = rows.join('') || '<tr><td>No hay fuentes en config.yaml</td></tr>';
+}
+// Ritmo medido entre consultas (no desde el inicio, que incluye el listado de la carpeta)
+const samples = [];
+function indexingText(st) {
+  if (!st.total) return `${st.source}: ${st.phase}…`;
+  const now = Date.now() / 1000;
+  samples.push([now, st.done]);
+  while (samples.length > 2 && now - samples[0][0] > 120) samples.shift();
+  const [t0, d0] = samples[0], rate = now > t0 + 5 ? (st.done - d0) / (now - t0) : 0;
+  const pct = (st.done / st.total * 100).toFixed(1);
+  let eta = '';
+  if (rate > 0) {
+    const min = Math.round((st.total - st.done) / rate / 60);
+    eta = ` · ${Math.round(rate * 60)} fotos/min · quedan ~${min >= 60 ? `${Math.floor(min / 60)} h ${min % 60} min` : `${min} min`}`;
+  }
+  const skipped = st.skipped ? ` (${st.skipped} ya hechas)` : '';
+  return `Indexando ${st.done}/${st.total}${skipped} · ${pct}%${eta} · ${st.faces} caras · ${st.errors} errores`;
+}
+async function pollStatus() {
+  const st = await (await fetch('/api/index/status')).json();
+  $('#reindex').disabled = st.running; $('#stop').disabled = !st.running;
+  const pct = st.total ? (st.done / st.total) * 100 : (st.running ? 0 : 100 * !!st.finished_at);
+  $('#prog').style.width = pct + '%';
+  $('#idxmsg').textContent = st.running ? indexingText(st) : (st.message || '');
+  $('#idxmsg').className = /^Error/.test(st.message || '') ? 'error' : '';
+  if (st.running) { if (!polling) polling = setInterval(pollStatus, 1500); }
+  else if (polling) { clearInterval(polling); polling = null; loadInfo(); }
+}
+$('#reindex').onclick = async () => {
+  $('#reindex').disabled = true; $('#idxmsg').textContent = 'Cargando modelo…';
+  await fetch('/api/index', { method: 'POST' }); pollStatus();
+};
+$('#stop').onclick = () => fetch('/api/index/stop', { method: 'POST' });
+
+loadInfo(); pollStatus();
+</script>
+</body>
+</html>

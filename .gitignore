@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+data/
+credentials.json
+token.json
+config.yaml
+mis-fotos/

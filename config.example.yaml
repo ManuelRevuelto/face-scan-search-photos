@@ -1,0 +1,28 @@
+# Copia este fichero a config.yaml y ajústalo.
+database: data/faces.db
+thumbnails_dir: data/thumbs
+models_dir: data/models    # modelos ONNX (se descargan solos la 1ª vez)
+threshold: 0.40        # similitud mínima (0-1) para considerar coincidencia
+max_side: 2000         # se reduce cada foto a este lado máximo antes de analizarla
+det_size: 1024         # resolución del detector (1024 detecta ~35% más caras pequeñas que 640, algo más lento)
+download_workers: 6    # descargas en paralelo durante el indexado
+providers: [CPUExecutionProvider]   # con GPU NVIDIA: [CUDAExecutionProvider, CPUExecutionProvider]
+
+sources:
+  # Carpeta pública de Drive ("cualquiera con el enlace"): no necesita credenciales
+  - name: 10k-2026
+    type: gdrive_public
+    folder_id: "https://drive.google.com/drive/folders/1u8mkgfx5Bn7ZtIcQyNk9xSYISYYfSxSy"
+    api_key: ""            # opcional: API key (Drive API) para listar vía API en vez de la vista pública
+    download_size: 2000    # descarga versión reducida (px del lado mayor)
+
+  # Carpeta privada / de tu propio Drive (OAuth)
+  # - name: drive
+  #   type: gdrive
+  #   folder_id: ""                 # vacío = todo tu Drive; o el ID de una carpeta concreta
+  #   credentials: credentials.json # OAuth "App de escritorio" descargado de Google Cloud Console
+  #   token: data/token.json
+
+  # - name: nas
+  #   type: local
+  #   path: '\NAS\fotos'         # o 'D:/Fotos'
